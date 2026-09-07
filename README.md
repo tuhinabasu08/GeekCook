@@ -671,9 +671,9 @@ These can be added in future versions.
 
 ## 23.5 No Conversation Memory
 
-Each recipe request is independent.
+~~Each recipe request is independent. The application does not currently maintain conversation history between requests.~~
 
-The application does not currently maintain conversation history between requests.
+**Resolved in the chatbot enhancement — see Section 31.** The application now maintains full conversation history and supports iterative recipe refinement.
 
 ---
 
@@ -1011,3 +1011,251 @@ The architecture is simple enough for a learning project while providing a pract
 The use of a local model also removes the need for cloud API credentials and provides a cost-effective environment for experimentation.
 
 The current design can subsequently be extended into a more complete personalized recipe platform by adding dietary preferences, cuisine selection, nutritional analysis, recipe history, favorites, and personalization.
+
+---
+
+# 31. Chatbot Enhancement — Conversational Recipe Refinement
+
+## 31.1 Motivation
+
+The original implementation (Sections 1–30) generated one recipe per form
+submission, with no memory of prior turns. If a user wanted a variation —
+swap an ingredient, make it vegetarian, serve more people — they had to
+start over and manually re-describe the whole recipe in a new prompt. This
+was tracked as Limitation 23.5 ("No Conversation Memory").
+
+The chatbot enhancement replaces the single-shot form with a real
+back-and-forth conversation, so the model can refine a recipe it already
+gave the user instead of generating from scratch each time.
+
+## 31.2 What Changed
+
+| | Original (v1) | Chatbot enhancement (v2) |
+|---|---|---|
+| Interaction model | `st.form` + one submit button | `st.chat_message` / `st.chat_input` |
+| History | None — each request independent | Full conversation kept in `st.session_state.messages` |
+| Prompt construction | New prompt built from scratch per request | Persistent system prompt + growing message history |
+| Follow-up edits | Not supported | Supported — user asks for a change, model returns the updated full recipe |
+| Reset | Reloading the page | Explicit "🔄 Start over" button |
+
+## 31.3 Updated Architecture
+
+```text
+┌─────────────────────────────┐
+│          User               │
+│                             │
+│ "chicken, onion, tomato"    │
+│ then later:                 │
+│ "make it vegetarian"        │
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│   Streamlit Chat Interface  │
+│                             │
+│  st.chat_message (history)  │
+│  st.chat_input (new turn)   │
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│   st.session_state.messages │
+│                             │
+│  [system, user, assistant,  │
+│   user, assistant, ...]     │
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│      Ollama Python API      │
+│                             │
+│  chat(model, messages=all)  │
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│       Ollama Runtime        │
+│                             │
+│     qwen2.5:3b              │
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│    Updated Recipe / Reply   │
+│  appended back into history │
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│   Streamlit Chat Interface  │
+│   renders the new turn      │
+└─────────────────────────────┘
+```
+
+The key architectural difference from Section 6: the entire message list is
+sent to Ollama on every turn, not just the latest input. This is what gives
+the model memory of the recipe it already produced.
+
+## 31.4 Session State
+
+Conversation history is held in Streamlit's session state, seeded with a
+system message that is never shown to the user:
+
+```python
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {"role": "system", "content": SYSTEM_PROMPT}
+    ]
+```
+
+Session state persists across reruns within the same browser session, which
+is what allows the chat to keep context between turns without a database.
+
+## 31.5 Updated System Prompt
+
+The prompt engineering from Section 14 is preserved (same recipe template:
+name, prep/cook time, servings, ingredients, instructions, tips), but it is
+now installed once as a system message rather than rebuilt per request, and
+extended with explicit rules for follow-up turns:
+
+```python
+SYSTEM_PROMPT = """You are GeekCook, a friendly recipe recommendation assistant.
+
+... (same recipe template as Section 14) ...
+
+- When the user asks you to change something about a recipe you already
+  gave (swap an ingredient, make it vegetarian, cut the time, serve more
+  people, etc.), give back the FULL recipe again in the same format above,
+  updated accordingly — don't just describe the change in words.
+- If the user asks a quick clarifying question that isn't about changing
+  the recipe (e.g. "why did you use butter instead of oil?"), answer
+  briefly in plain sentences instead of the full template.
+"""
+```
+
+This distinguishes two kinds of follow-up turns: recipe-changing requests
+(which re-render the full template so the output stays consistent and
+displayable) and simple questions (which get a short conversational
+answer instead of forcing the whole template every time).
+
+## 31.6 Chat Generation Function
+
+Section 13's `generate_recipe(ingredients)` is replaced with a more general
+`generate_reply(messages)` that sends the whole conversation, not just one
+ingredient string:
+
+```python
+def generate_reply(messages):
+    response = chat(
+        model=MODEL_NAME,
+        messages=messages
+    )
+    return response.message.content
+```
+
+`MODEL_NAME` and the underlying `ollama.chat()` call are unchanged from
+Section 15 — only what gets passed as `messages` is different.
+
+## 31.7 Rendering the Conversation
+
+Each render pass replays the full chat history (skipping the hidden system
+message):
+
+```python
+for msg in st.session_state.messages:
+    if msg["role"] == "system":
+        continue
+    with st.chat_message(msg["role"], avatar="👨‍🍳" if msg["role"] == "assistant" else None):
+        st.markdown(msg["content"])
+```
+
+New turns are appended and displayed the same way `st.markdown(recipe)`
+rendered the original single response (Section 20) — Markdown formatting
+from the recipe template still renders correctly inside chat bubbles.
+
+## 31.8 Input Handling
+
+`st.form` and the ingredients text area (Section 16) are replaced with
+`st.chat_input`, which submits on Enter and clears itself automatically —
+no explicit submit button or form-batching logic is needed:
+
+```python
+user_input = st.chat_input(placeholder)
+
+if user_input:
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    ...
+```
+
+The placeholder text adapts depending on whether the conversation has
+started yet, prompting for ingredients first and for tweaks afterward.
+
+## 31.9 Error Handling
+
+The `try/except` pattern from Section 19 is preserved, with one addition:
+if generation fails mid-turn, the user's message stays in history but the
+broken assistant turn is not saved, so a retry doesn't confuse the model
+with a half-formed prior reply:
+
+```python
+except Exception as e:
+    st.error("❌ Something went wrong while generating a response.")
+    st.caption(f"Error details: {str(e)}")
+    st.session_state.messages.pop()
+```
+
+## 31.10 Reset Behavior
+
+Since conversation state now persists across turns, an explicit reset
+control was added:
+
+```python
+if st.button("🔄 Start over", use_container_width=True):
+    st.session_state.messages = [
+        {"role": "system", "content": SYSTEM_PROMPT}
+    ]
+    st.rerun()
+```
+
+This clears history back to just the system prompt without requiring a
+full page reload.
+
+## 31.11 Updated End-to-End Flow
+
+Extending Section 21's flow to cover a follow-up turn:
+
+1. User enters ingredients in `st.chat_input`.
+2. Message is appended to `st.session_state.messages` and rendered.
+3. Full history is sent to `chat(model=MODEL_NAME, messages=...)`.
+4. Model returns the full recipe using the template from Section 14.
+5. Reply is appended to history and rendered.
+6. User sends a follow-up, e.g. "make it vegetarian."
+7. That message is appended; the full history (including the prior recipe)
+   is sent again.
+8. Because the model can see its own earlier recipe in the conversation,
+   it returns an updated version of the *same* recipe rather than an
+   unrelated new one.
+
+## 31.12 Known Considerations
+
+`qwen2.5:3b` is a small model. Multi-turn recipe editing asks more of it
+than single-shot generation did, since it now has to track what changed
+across turns rather than starting fresh each time. If testing shows it
+losing track of earlier edits or drifting from the output template over a
+long conversation, consider:
+
+* Trimming or summarizing older turns before sending them to the model.
+* Testing a larger Ollama-supported model for comparison.
+* Adding a periodic reminder of the format rules for very long
+  conversations.
+
+## 31.13 Compatibility
+
+No changes were required to:
+
+* `requirements.txt` (Section 8) — still just `streamlit` and `ollama`.
+* `MODEL_NAME` configuration (Section 12).
+* The underlying `ollama.chat()` call signature (Section 15).
+* Deployment model (Section 26) or installation procedure (Section 27).
+
+The enhancement is contained entirely within `app.py`'s interaction layer.
