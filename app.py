@@ -1,6 +1,5 @@
 import streamlit as st
 import ollama
-ollama signin
 from ollama import chat
 from ollama import Client
 
