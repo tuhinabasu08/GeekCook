@@ -41,7 +41,7 @@ st.write(
 # Model Configuration
 # ---------------------------------------------------------
 
-MODEL_NAME = "gpt-oss:120b"
+MODEL_NAME = "gpt-oss:120b-cloud"
 
 SYSTEM_PROMPT = """You are GeekCook, a friendly recipe recommendation assistant.
 
