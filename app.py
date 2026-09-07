@@ -1,9 +1,9 @@
 import streamlit as st
-pip install ollama
+import ollama
+ollama signin
 from ollama import chat
 from ollama import Client
 
-ollama signin
 
 client = Client(
     host="https://ollama.com",
