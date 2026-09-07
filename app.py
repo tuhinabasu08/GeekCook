@@ -1,5 +1,15 @@
 import streamlit as st
+pip install ollama
 from ollama import chat
+from ollama import Client
+
+ollama signin
+ollama pull gpt-oss:20b-cloud
+
+client = Client(
+    host="https://ollama.com",
+    headers={'Authorization': 'Bearer ' + os.environ.get('OLLAMA_API_KEY')}
+)
 
 
 # ---------------------------------------------------------
@@ -31,7 +41,7 @@ st.write(
 # Model Configuration
 # ---------------------------------------------------------
 
-MODEL_NAME = "qwen3"
+MODEL_NAME = "gpt-oss:20b"
 
 SYSTEM_PROMPT = """You are GeekCook, a friendly recipe recommendation assistant.
 
