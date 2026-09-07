@@ -31,7 +31,7 @@ st.write(
 # Model Configuration
 # ---------------------------------------------------------
 
-MODEL_NAME = "qwen2.5:3b"
+MODEL_NAME = "qwen3"
 
 SYSTEM_PROMPT = """You are GeekCook, a friendly recipe recommendation assistant.
 
@@ -82,7 +82,8 @@ Important rules:
 def generate_reply(messages):
     response = chat(
         model=MODEL_NAME,
-        messages=messages
+        messages=messages,
+        think=True
     )
     return response.message.content
 
