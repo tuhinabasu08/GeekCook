@@ -4,7 +4,7 @@ from ollama import chat
 from ollama import Client
 
 ollama signin
-ollama pull gpt-oss:20b-cloud
+ollama pull gpt-oss:120b-cloud
 
 client = Client(
     host="https://ollama.com",
@@ -41,7 +41,7 @@ st.write(
 # Model Configuration
 # ---------------------------------------------------------
 
-MODEL_NAME = "gpt-oss:20b"
+MODEL_NAME = "gpt-oss:120b"
 
 SYSTEM_PROMPT = """You are GeekCook, a friendly recipe recommendation assistant.
 
