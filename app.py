@@ -12,35 +12,74 @@ st.set_page_config(
     layout="centered"
 )
 
+
+# ---------------------------------------------------------
+# Sidebar Filters
+# ---------------------------------------------------------
+
 st.sidebar.header("📊 Filter Options")
 
-# Categorical Filter (Multiselect)
-cuisine = ["North Indian", "Chinese", "Bengali", "Maharashtrian", "Goan", "South Indian", "Italian", "Continental", "Pan Asian"]
-selected_categories = st.sidebar.multiselect(
+# Categorical Filter
+cuisine = [
+    "North Indian",
+    "Chinese",
+    "Bengali",
+    "Maharashtrian",
+    "Goan",
+    "South Indian",
+    "Italian",
+    "Continental",
+    "Pan Asian"
+]
+
+selected_cuisine = st.sidebar.multiselect(
     label="Select Cuisine",
-    options=cuisine.unique(),
-    default=cuisine.unique() # Defaults to selecting everything
+    options=cuisine,
+    default=cuisine
 )
+
+# Handle no cuisine selection
+if selected_cuisine:
+    cuisine_text = ", ".join(selected_cuisine)
+else:
+    cuisine_text = "any cuisine"
+
 
 # Vegetarian Toggle
 veg_only = st.sidebar.checkbox("Vegetarian Only 🌿")
 
-diet_restriction = "The recipe MUST be strictly vegetarian." if veg_only else "The recipe can include meat or be vegetarian."
-    
-# Numerical Filter (Slider)
-min_val, max_val = int(1, 50)
+diet_restriction = (
+    "The recipe MUST be strictly vegetarian."
+    if veg_only
+    else "The recipe can include meat or be vegetarian."
+)
+
+
+# Numerical Filter
+min_val = 1
+max_val = 50
+
 selected_serve_range = st.sidebar.slider(
     label="Select Number of Servings",
     min_value=min_val,
     max_value=max_val,
-    value=(min_val, max_val) # Defaults to full range
+    value=(min_val, max_val)
 )
+
 
 # ---------------------------------------------------------
 # Ollama Cloud Configuration
 # ---------------------------------------------------------
 
-OLLAMA_API_KEY = st.secrets["OLLAMA_API_KEY"]
+try:
+    OLLAMA_API_KEY = st.secrets["OLLAMA_API_KEY"]
+except KeyError:
+    st.error(
+        "OLLAMA_API_KEY is not configured. "
+        "Please add it to Streamlit Secrets."
+    )
+    st.stop()
+
 
 client = Client(
     host="https://ollama.com",
@@ -56,10 +95,15 @@ MODEL_NAME = "gpt-oss:120b"
 # System Prompt
 # ---------------------------------------------------------
 
-SYSTEM_PROMPT = f"""You are GeekCook, a friendly recipe recommendation assistant.
+SYSTEM_PROMPT = f"""
+You are GeekCook, a friendly recipe recommendation assistant.
 
 When the user gives you ingredients or asks for a recipe, create an
-easy-to-cook recipe from the {selected_cuisine} cuisine using this exact format:
+easy-to-cook recipe using one of these cuisines:
+
+{cuisine_text}
+
+Use this exact format:
 
 ## 🍽️ Recipe Name
 
@@ -69,8 +113,8 @@ easy-to-cook recipe from the {selected_cuisine} cuisine using this exact format:
 
 ### 🥕 Ingredients
 
-- List the ingredients required
-- Clearly identify any additional ingredients needed
+- List the ingredients required.
+- Clearly identify any additional ingredients needed.
 
 ### 👨‍🍳 Instructions
 
@@ -85,18 +129,20 @@ easy-to-cook recipe from the {selected_cuisine} cuisine using this exact format:
 
 Important rules:
 
-- Adjust ingredient quantity as per number of servings:{selected_serve_range}
-- Follow the dietary restiction: {diet_restriction}
-- Prioritize the ingredients the user has told you about.
+- Adjust ingredient quantities according to the requested serving range:
+  {selected_serve_range}
+- Follow the dietary restriction:
+  {diet_restriction}
+- Prioritize the ingredients the user has provided.
 - Keep recipes beginner-friendly and practical for a normal home kitchen.
 - Do not assume the user has unusual ingredients.
-- When the user asks to change something about a recipe you already
-  gave (swap an ingredient, make it vegetarian, cut the time, serve
-  more people, etc.), give back the FULL recipe again in the same
-  format above, updated accordingly.
-- If the user asks a quick clarifying question that isn"t about
+- If the user asks to change something about a recipe you already gave
+  (swap an ingredient, make it vegetarian, reduce the cooking time,
+  serve more people, etc.), return the FULL recipe again in the same
+  format, updated accordingly.
+- If the user asks a quick clarifying question that isn't about
   changing the recipe, answer briefly in plain sentences instead of
-  the full template.
+  using the full recipe template.
 """
 
 
@@ -108,8 +154,7 @@ def generate_reply(messages):
 
     response = client.chat(
         model=MODEL_NAME,
-        messages=messages,
-        think=True
+        messages=messages
     )
 
     return response.message.content
@@ -173,8 +218,8 @@ has_started = len(st.session_state.messages) > 1
 if not has_started:
 
     st.info(
-        "👋 Start by telling GeekCook what ingredients you have — "
-        "e.g. "chicken, onion, tomato, garlic, rice, capsicum"."
+        '👋 Start by telling GeekCook what ingredients you have — '
+        'e.g. "chicken, onion, tomato, garlic, rice, capsicum".'
     )
 
 
@@ -195,15 +240,24 @@ for msg in st.session_state.messages:
 # Chat Input
 # ---------------------------------------------------------
 
-placeholder = (
-    "What ingredients do you have?"
-    if not has_started
-    else "Ask for a tweak — e.g. "
-         ""make it vegetarian" or "swap rice for pasta""
-)
+if not has_started:
+
+    placeholder = "What ingredients do you have?"
+
+else:
+
+    placeholder = (
+        'Ask for a tweak — e.g. '
+        '"make it vegetarian" or "swap rice for pasta"'
+    )
+
 
 user_input = st.chat_input(placeholder)
 
+
+# ---------------------------------------------------------
+# Process User Message
+# ---------------------------------------------------------
 
 if user_input:
 
@@ -262,3 +316,4 @@ st.markdown("---")
 st.caption(
     "GeekCook 👨‍🍳 | Powered by Ollama Cloud + gpt-oss:120b"
 )
+
