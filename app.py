@@ -55,18 +55,6 @@ diet_restriction = (
 )
 
 
-# Numerical Filter
-min_val = 1
-max_val = 50
-
-selected_serve_range = st.sidebar.slider(
-    label="Select Number of Servings",
-    min_value=min_val,
-    max_value=max_val,
-    value=(min_val, max_val)
-)
-
-
 # ---------------------------------------------------------
 # Ollama Cloud Configuration
 # ---------------------------------------------------------
@@ -129,8 +117,7 @@ Use this exact format:
 
 Important rules:
 
-- Adjust ingredient quantities according to the requested serving range:
-  {selected_serve_range}
+- Before generating, prompt user to provide number of servings and adjust ingredient quantities according to the requested serving size.
 - Follow the dietary restriction:
   {diet_restriction}
 - Prioritize the ingredients the user has provided.
@@ -315,5 +302,6 @@ st.markdown("---")
 
 st.caption(
     "GeekCook 👨‍🍳 | Powered by Ollama Cloud + gpt-oss:120b"
+    "The app is still in testing phase, so few errors can occur - please verify before following recipe."
 )
 
