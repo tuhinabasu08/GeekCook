@@ -12,6 +12,29 @@ st.set_page_config(
     layout="centered"
 )
 
+st.sidebar.header("📊 Filter Options")
+
+# Categorical Filter (Multiselect)
+cuisine = ["North Indian", "Chinese", "Bengali", "Maharashtrian", "Goan", "South Indian", "Italian", "Continental", "Pan Asian"]
+selected_categories = st.sidebar.multiselect(
+    label="Select Cuisine",
+    options=cuisine.unique(),
+    default=cuisine.unique() # Defaults to selecting everything
+)
+
+# Vegetarian Toggle
+veg_only = st.sidebar.checkbox("Vegetarian Only 🌿")
+
+diet_restriction = "The recipe MUST be strictly vegetarian." if veg_only else "The recipe can include meat or be vegetarian."
+    
+# Numerical Filter (Slider)
+min_val, max_val = int(1, 50)
+selected_serve_range = st.sidebar.slider(
+    label="Select Number of Servings",
+    min_value=min_val,
+    max_value=max_val,
+    value=(min_val, max_val) # Defaults to full range
+)
 
 # ---------------------------------------------------------
 # Ollama Cloud Configuration
@@ -33,10 +56,10 @@ MODEL_NAME = "gpt-oss:120b"
 # System Prompt
 # ---------------------------------------------------------
 
-SYSTEM_PROMPT = """You are GeekCook, a friendly recipe recommendation assistant.
+SYSTEM_PROMPT = f"""You are GeekCook, a friendly recipe recommendation assistant.
 
 When the user gives you ingredients or asks for a recipe, create an
-easy-to-cook recipe using this exact format:
+easy-to-cook recipe from the {selected_cuisine} cuisine using this exact format:
 
 ## 🍽️ Recipe Name
 
@@ -62,6 +85,8 @@ easy-to-cook recipe using this exact format:
 
 Important rules:
 
+- Adjust ingredient quantity as per number of servings:{selected_serve_range}
+- Follow the dietary restiction: {diet_restriction}
 - Prioritize the ingredients the user has told you about.
 - Keep recipes beginner-friendly and practical for a normal home kitchen.
 - Do not assume the user has unusual ingredients.
@@ -69,7 +94,7 @@ Important rules:
   gave (swap an ingredient, make it vegetarian, cut the time, serve
   more people, etc.), give back the FULL recipe again in the same
   format above, updated accordingly.
-- If the user asks a quick clarifying question that isn't about
+- If the user asks a quick clarifying question that isn"t about
   changing the recipe, answer briefly in plain sentences instead of
   the full template.
 """
@@ -149,7 +174,7 @@ if not has_started:
 
     st.info(
         "👋 Start by telling GeekCook what ingredients you have — "
-        'e.g. "chicken, onion, tomato, garlic, rice, capsicum".'
+        "e.g. "chicken, onion, tomato, garlic, rice, capsicum"."
     )
 
 
@@ -174,7 +199,7 @@ placeholder = (
     "What ingredients do you have?"
     if not has_started
     else "Ask for a tweak — e.g. "
-         '"make it vegetarian" or "swap rice for pasta"'
+         ""make it vegetarian" or "swap rice for pasta""
 )
 
 user_input = st.chat_input(placeholder)
