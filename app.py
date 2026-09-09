@@ -301,7 +301,7 @@ if user_input:
 st.markdown("---")
 
 st.caption(
-    "GeekCook 👨‍🍳 | Powered by Ollama Cloud + gpt-oss:120b"
-    "The app is still in testing phase, so few errors can occur - please verify before following recipe."
+    "GeekCook 👨‍🍳 | Powered by Ollama Cloud"
+    "    The app is still in testing phase, so few errors can occur - please verify before following recipe."
 )
 
