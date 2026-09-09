@@ -47,7 +47,8 @@ client = Client(
 
 MODELS = {
     "Qwen 2.5 3B": "qwen2.5:3b",
-    "GPT-OSS-120B": "gpt-oss:120b"
+    "GPT-OSS-120B": "gpt-oss:120b", 
+    "Gemma4":"gemma4"
 }
 
 
@@ -72,6 +73,11 @@ MODEL_COSTS = {
     },
 
     "GPT-OSS-120B": {
+        "input": 0.00,
+        "output": 0.00
+    },
+
+    "Gemma4": {
         "input": 0.00,
         "output": 0.00
     }
@@ -333,10 +339,16 @@ if st.button(
             "GPT-OSS-120B",
             prompt
         )
+        
+        gemma_result = run_model(
+            "Gemma4",
+            prompt
+        )
 
     results = [
         qwen_result,
-        gpt_result
+        gpt_result,
+        gemma_result
     ]
 
     # Add evaluation metadata
@@ -370,6 +382,7 @@ if len(st.session_state.evaluation_results) >= 2:
 
     qwen = latest_results[0]
     gpt = latest_results[1]
+    gemma4 = latest_results[2]
 
     # -----------------------------------------------------
     # HANDLE MODEL ERRORS
@@ -387,17 +400,23 @@ if len(st.session_state.evaluation_results) >= 2:
             f"GPT-OSS-120B failed:\n\n{gpt['error']}"
         )
 
+    if not gemma4["success"]:
+
+        st.error(
+            f"Gemma4 failed:\n\n{gpt['error']}"
+        )
+
     # -----------------------------------------------------
     # SIDE-BY-SIDE RESPONSES
     # -----------------------------------------------------
 
-    if qwen["success"] and gpt["success"]:
+    if qwen["success"] and gpt["success"] and gemma["success"]:
 
         st.divider()
 
         st.subheader("🧠 Model Responses")
 
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
 
         with col1:
 
@@ -414,7 +433,14 @@ if len(st.session_state.evaluation_results) >= 2:
             st.markdown(
                 gpt["response"]
             )
+            
+        with col3:
 
+            st.markdown("### Gemma4")
+
+            st.markdown(
+                gemma["response"]
+            )
         # -------------------------------------------------
         # PERFORMANCE METRICS
         # -------------------------------------------------
@@ -450,6 +476,15 @@ if len(st.session_state.evaluation_results) >= 2:
                 gpt["total_tokens"],
                 round(gpt["tokens_per_second"], 2),
                 round(gpt["cost"], 6)
+            ],
+
+            "Gemma4": [
+                round(gemma["latency"], 2),
+                gemma["input_tokens"],
+                gemma["output_tokens"],
+                gemma["total_tokens"],
+                round(gemma["tokens_per_second"], 2),
+                round(gemma["cost"], 6)
             ]
         })
 
@@ -471,7 +506,7 @@ if len(st.session_state.evaluation_results) >= 2:
             "Rate each model from 1 (poor) to 5 (excellent)."
         )
 
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
 
         with col1:
 
@@ -524,6 +559,32 @@ if len(st.session_state.evaluation_results) >= 2:
                 ["Yes", "No"],
                 key="gpt_cook"
             )
+            
+        with col3:
+
+            st.markdown("### Gemma4")
+
+            gemma_quality = st.slider(
+                "Recipe quality",
+                1,
+                5,
+                3,
+                key="gemma_quality"
+            )
+
+            gemma_constraints = st.slider(
+                "Constraint following",
+                1,
+                5,
+                3,
+                key="gemma_constraints"
+            )
+
+            gemma_cook = st.radio(
+                "Would you actually cook this?",
+                ["Yes", "No"],
+                key="gemma_cook"
+            )
 
         # -------------------------------------------------
         # OVERALL SCORE
@@ -550,6 +611,10 @@ if len(st.session_state.evaluation_results) >= 2:
             + gpt_constraints * 0.40
         )
 
+        gemma_score = (
+            gemma_quality * 0.60
+            + gemma_constraints * 0.40
+        )
         # -------------------------------------------------
         # SCORE COMPARISON
         # -------------------------------------------------
@@ -579,6 +644,13 @@ if len(st.session_state.evaluation_results) >= 2:
                 gpt_constraints,
                 1 if gpt_cook == "Yes" else 0,
                 round(gpt_score, 2)
+            ],
+
+            "Gemma4": [
+                gemma_quality,
+                gemma_constraints,
+                1 if gemma_cook == "Yes" else 0,
+                round(gemma_score, 2)
             ]
         })
 
@@ -594,7 +666,7 @@ if len(st.session_state.evaluation_results) >= 2:
 
         st.subheader("💰 Cost Comparison")
 
-        cost_col1, cost_col2 = st.columns(2)
+        cost_col1, cost_col2, cost_col3 = st.columns(3)
 
         with cost_col1:
 
@@ -609,8 +681,15 @@ if len(st.session_state.evaluation_results) >= 2:
                 "GPT-OSS-120B",
                 f"${gpt['cost']:.6f}"
             )
+            
+        with cost_col3:
 
-        if qwen["cost"] == 0 and gpt["cost"] == 0:
+            st.metric(
+                "Gemma4",
+                f"${gemma['cost']:.6f}"
+            )
+
+        if qwen["cost"] == 0 and gpt["cost"] == 0 and gemma["cost"] == 0:
 
             st.info(
                 "Model pricing is currently set to $0.00. "
@@ -627,7 +706,7 @@ if len(st.session_state.evaluation_results) >= 2:
 
         st.subheader("🎯 GeekCook Decision")
 
-        if qwen["cost"] > 0 and gpt["cost"] > 0:
+        if qwen["cost"] > 0 and gpt["cost"] > 0 and gemma["cost"] > 0:
 
             qwen_quality_per_dollar = (
                 qwen_score / qwen["cost"]
@@ -635,6 +714,10 @@ if len(st.session_state.evaluation_results) >= 2:
 
             gpt_quality_per_dollar = (
                 gpt_score / gpt["cost"]
+            )
+
+            gemma_quality_per_dollar = (
+                gemma_score / gemma["cost"]
             )
 
             qpd_df = pd.DataFrame({
@@ -655,6 +738,12 @@ if len(st.session_state.evaluation_results) >= 2:
                     round(gpt_score, 2),
                     round(gpt["cost"], 6),
                     round(gpt_quality_per_dollar, 2)
+                ],
+    
+                "Gemma4": [
+                    round(gemma_score, 2),
+                    round(gemma["cost"], 6),
+                    round(gemma_quality_per_dollar, 2)
                 ]
             })
 
@@ -664,18 +753,25 @@ if len(st.session_state.evaluation_results) >= 2:
                 hide_index=True
             )
 
-            if qwen_quality_per_dollar > gpt_quality_per_dollar:
+            if qwen_quality_per_dollar > gpt_quality_per_dollar and qwen_quality_per_dollar > gemma_quality_per_dollar:
 
                 st.success(
                     "🏆 Qwen 2.5 3B currently provides the "
-                    "better quality-to-cost ratio."
+                    "best quality-to-cost ratio."
                 )
 
-            elif gpt_quality_per_dollar > qwen_quality_per_dollar:
+            elif gpt_quality_per_dollar > qwen_quality_per_dollar and gpt_quality_per_dollar > gemma_quality_per_dollar:
 
                 st.success(
                     "🏆 GPT-OSS-120B currently provides the "
-                    "better quality-to-cost ratio."
+                    "best quality-to-cost ratio."
+                )
+                
+            elif gemma_quality_per_dollar > gpt_quality_per_dollar and gemma_quality_per_dollar > qwen_quality_per_dollar:
+
+                st.success(
+                    "🏆 Gemma currently provides the "
+                    "best quality-to-cost ratio."
                 )
 
             else:
