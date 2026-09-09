@@ -1,8 +1,10 @@
+
 import streamlit as st
 from ollama import Client
 import time
 import pandas as pd
 from datetime import datetime
+
 
 # =========================================================
 # PAGE CONFIG
@@ -16,6 +18,7 @@ st.set_page_config(
 
 st.title("🤖 GeekCook Model Evaluation")
 st.caption("Compare LLM performance for recipe recommendations")
+
 
 # =========================================================
 # OLLAMA CLOUD CONFIGURATION
@@ -32,7 +35,6 @@ except KeyError:
     st.stop()
 
 
-# Create Ollama Cloud client
 client = Client(
     host="https://ollama.com",
     headers={
@@ -47,8 +49,8 @@ client = Client(
 
 MODELS = {
     "Qwen 2.5 3B": "qwen2.5:3b",
-    "GPT-OSS-120B": "gpt-oss:120b", 
-    "Gemma4":"gemma4"
+    "GPT-OSS-120B": "gpt-oss:120b",
+    "Gemma 4": "gemma4"
 }
 
 
@@ -56,14 +58,10 @@ MODELS = {
 # MODEL COST CONFIGURATION
 # =========================================================
 #
-# Cost should be USD per 1M tokens.
+# USD per 1M tokens.
 #
-# IMPORTANT:
 # Replace these values with the actual Ollama Cloud
-# pricing you are using.
-#
-# Keeping them configurable makes it easy to update
-# pricing without changing the evaluation logic.
+# pricing you want to use for your evaluation.
 # =========================================================
 
 MODEL_COSTS = {
@@ -77,7 +75,7 @@ MODEL_COSTS = {
         "output": 0.00
     },
 
-    "Gemma4": {
+    "Gemma 4": {
         "input": 0.00,
         "output": 0.00
     }
@@ -328,41 +326,32 @@ if st.button(
     use_container_width=True
 ):
 
-    with st.spinner("Running both models on Ollama Cloud..."):
+    results = []
 
-        qwen_result = run_model(
-            "Qwen 2.5 3B",
-            prompt
-        )
+    with st.spinner(
+        "Running Qwen 2.5 3B, GPT-OSS-120B and Gemma 4 on Ollama Cloud..."
+    ):
 
-        gpt_result = run_model(
-            "GPT-OSS-120B",
-            prompt
-        )
-        
-        gemma_result = run_model(
-            "Gemma4",
-            prompt
-        )
+        for model_name in MODELS:
 
-    results = [
-        qwen_result,
-        gpt_result,
-        gemma_result
-    ]
+            result = run_model(
+                model_name,
+                prompt
+            )
 
-    # Add evaluation metadata
-    for result in results:
+            # Add evaluation metadata
+            result["timestamp"] = datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
 
-        result["timestamp"] = datetime.now().strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
+            result["ingredients"] = ingredients
+            result["cuisine"] = cuisine
+            result["diet"] = diet
+            result["time_limit"] = time_limit
 
-        result["ingredients"] = ingredients
-        result["cuisine"] = cuisine
-        result["diet"] = diet
-        result["time_limit"] = time_limit
+            results.append(result)
 
+    # Store all three results
     st.session_state.evaluation_results.extend(
         results
     )
@@ -374,43 +363,61 @@ if st.button(
 # DISPLAY RESULTS
 # =========================================================
 
-if len(st.session_state.evaluation_results) >= 2:
-
-    latest_results = (
-        st.session_state.evaluation_results[-2:]
-    )
-
-    qwen = latest_results[0]
-    gpt = latest_results[1]
-    gemma4 = latest_results[2]
+if len(st.session_state.evaluation_results) >= 3:
 
     # -----------------------------------------------------
+    # Get the latest result for each model
+    # -----------------------------------------------------
+
+    latest_results = {}
+
+    for result in reversed(
+        st.session_state.evaluation_results
+    ):
+
+        model_name = result["model"]
+
+        if model_name not in latest_results:
+
+            latest_results[model_name] = result
+
+        if len(latest_results) == len(MODELS):
+
+            break
+
+
+    qwen = latest_results["Qwen 2.5 3B"]
+    gpt = latest_results["GPT-OSS-120B"]
+    gemma4 = latest_results["Gemma 4"]
+
+
+    # =====================================================
     # HANDLE MODEL ERRORS
-    # -----------------------------------------------------
+    # =====================================================
 
-    if not qwen["success"]:
+    for result in [
+        qwen,
+        gpt,
+        gemma4
+    ]:
 
-        st.error(
-            f"Qwen 2.5 3B failed:\n\n{qwen['error']}"
-        )
+        if not result["success"]:
 
-    if not gpt["success"]:
+            st.error(
+                f"{result['model']} failed:\n\n"
+                f"{result['error']}"
+            )
 
-        st.error(
-            f"GPT-OSS-120B failed:\n\n{gpt['error']}"
-        )
 
-    if not gemma4["success"]:
-
-        st.error(
-            f"Gemma4 failed:\n\n{gpt['error']}"
-        )
-
-    # -----------------------------------------------------
+    # =====================================================
     # SIDE-BY-SIDE RESPONSES
-    # -----------------------------------------------------
+    # =====================================================
 
-    if qwen["success"] and gpt["success"] and gemma["success"]:
+    if (
+        qwen["success"]
+        and gpt["success"]
+        and gemma4["success"]
+    ):
 
         st.divider()
 
@@ -433,17 +440,19 @@ if len(st.session_state.evaluation_results) >= 2:
             st.markdown(
                 gpt["response"]
             )
-            
+
         with col3:
 
-            st.markdown("### Gemma4")
+            st.markdown("### Gemma 4")
 
             st.markdown(
-                gemma["response"]
+                gemma4["response"]
             )
-        # -------------------------------------------------
+
+
+        # =================================================
         # PERFORMANCE METRICS
-        # -------------------------------------------------
+        # =================================================
 
         st.divider()
 
@@ -478,13 +487,13 @@ if len(st.session_state.evaluation_results) >= 2:
                 round(gpt["cost"], 6)
             ],
 
-            "Gemma4": [
-                round(gemma["latency"], 2),
-                gemma["input_tokens"],
-                gemma["output_tokens"],
-                gemma["total_tokens"],
-                round(gemma["tokens_per_second"], 2),
-                round(gemma["cost"], 6)
+            "Gemma 4": [
+                round(gemma4["latency"], 2),
+                gemma4["input_tokens"],
+                gemma4["output_tokens"],
+                gemma4["total_tokens"],
+                round(gemma4["tokens_per_second"], 2),
+                round(gemma4["cost"], 6)
             ]
         })
 
@@ -494,9 +503,10 @@ if len(st.session_state.evaluation_results) >= 2:
             hide_index=True
         )
 
-        # -------------------------------------------------
+
+        # =================================================
         # HUMAN EVALUATION
-        # -------------------------------------------------
+        # =================================================
 
         st.divider()
 
@@ -507,6 +517,11 @@ if len(st.session_state.evaluation_results) >= 2:
         )
 
         col1, col2, col3 = st.columns(3)
+
+
+        # -------------------------------------------------
+        # QWEN
+        # -------------------------------------------------
 
         with col1:
 
@@ -534,6 +549,11 @@ if len(st.session_state.evaluation_results) >= 2:
                 key="qwen_cook"
             )
 
+
+        # -------------------------------------------------
+        # GPT
+        # -------------------------------------------------
+
         with col2:
 
             st.markdown("### GPT-OSS-120B")
@@ -559,10 +579,15 @@ if len(st.session_state.evaluation_results) >= 2:
                 ["Yes", "No"],
                 key="gpt_cook"
             )
-            
+
+
+        # -------------------------------------------------
+        # GEMMA
+        # -------------------------------------------------
+
         with col3:
 
-            st.markdown("### Gemma4")
+            st.markdown("### Gemma 4")
 
             gemma_quality = st.slider(
                 "Recipe quality",
@@ -586,20 +611,18 @@ if len(st.session_state.evaluation_results) >= 2:
                 key="gemma_cook"
             )
 
-        # -------------------------------------------------
-        # OVERALL SCORE
-        # -------------------------------------------------
-        #
-        # Cost is the primary model-selection criterion.
-        #
-        # Quality score itself is normalized to a 1-5 scale.
+
+        # =================================================
+        # OVERALL QUALITY SCORE
+        # =================================================
+
+        # Quality score:
         #
         # 60% Recipe Quality
         # 40% Constraint Following
         #
-        # Cost is evaluated separately below because it is
-        # the primary business decision criterion.
-        # -------------------------------------------------
+        # Cost is evaluated separately because it is the
+        # primary model-selection criterion.
 
         qwen_score = (
             qwen_quality * 0.60
@@ -615,9 +638,11 @@ if len(st.session_state.evaluation_results) >= 2:
             gemma_quality * 0.60
             + gemma_constraints * 0.40
         )
-        # -------------------------------------------------
+
+
+        # =================================================
         # SCORE COMPARISON
-        # -------------------------------------------------
+        # =================================================
 
         st.divider()
 
@@ -646,7 +671,7 @@ if len(st.session_state.evaluation_results) >= 2:
                 round(gpt_score, 2)
             ],
 
-            "Gemma4": [
+            "Gemma 4": [
                 gemma_quality,
                 gemma_constraints,
                 1 if gemma_cook == "Yes" else 0,
@@ -660,9 +685,10 @@ if len(st.session_state.evaluation_results) >= 2:
             hide_index=True
         )
 
-        # -------------------------------------------------
+
+        # =================================================
         # COST COMPARISON
-        # -------------------------------------------------
+        # =================================================
 
         st.subheader("💰 Cost Comparison")
 
@@ -681,15 +707,20 @@ if len(st.session_state.evaluation_results) >= 2:
                 "GPT-OSS-120B",
                 f"${gpt['cost']:.6f}"
             )
-            
+
         with cost_col3:
 
             st.metric(
-                "Gemma4",
-                f"${gemma['cost']:.6f}"
+                "Gemma 4",
+                f"${gemma4['cost']:.6f}"
             )
 
-        if qwen["cost"] == 0 and gpt["cost"] == 0 and gemma["cost"] == 0:
+
+        if (
+            qwen["cost"] == 0
+            and gpt["cost"] == 0
+            and gemma4["cost"] == 0
+        ):
 
             st.info(
                 "Model pricing is currently set to $0.00. "
@@ -698,27 +729,33 @@ if len(st.session_state.evaluation_results) >= 2:
                 "comparison."
             )
 
-        # -------------------------------------------------
-        # MODEL RECOMMENDATION
-        # -------------------------------------------------
+
+        # =================================================
+        # QUALITY / DOLLAR
+        # =================================================
 
         st.divider()
 
         st.subheader("🎯 GeekCook Decision")
 
-        if qwen["cost"] > 0 and gpt["cost"] > 0 and gemma["cost"] > 0:
+        if (
+            qwen["cost"] > 0
+            and gpt["cost"] > 0
+            and gemma4["cost"] > 0
+        ):
 
-            qwen_quality_per_dollar = (
-                qwen_score / qwen["cost"]
-            )
+            quality_per_dollar = {
 
-            gpt_quality_per_dollar = (
-                gpt_score / gpt["cost"]
-            )
+                "Qwen 2.5 3B":
+                    qwen_score / qwen["cost"],
 
-            gemma_quality_per_dollar = (
-                gemma_score / gemma["cost"]
-            )
+                "GPT-OSS-120B":
+                    gpt_score / gpt["cost"],
+
+                "Gemma 4":
+                    gemma_score / gemma4["cost"]
+            }
+
 
             qpd_df = pd.DataFrame({
 
@@ -731,19 +768,28 @@ if len(st.session_state.evaluation_results) >= 2:
                 "Qwen 2.5 3B": [
                     round(qwen_score, 2),
                     round(qwen["cost"], 6),
-                    round(qwen_quality_per_dollar, 2)
+                    round(
+                        quality_per_dollar["Qwen 2.5 3B"],
+                        2
+                    )
                 ],
 
                 "GPT-OSS-120B": [
                     round(gpt_score, 2),
                     round(gpt["cost"], 6),
-                    round(gpt_quality_per_dollar, 2)
+                    round(
+                        quality_per_dollar["GPT-OSS-120B"],
+                        2
+                    )
                 ],
-    
-                "Gemma4": [
+
+                "Gemma 4": [
                     round(gemma_score, 2),
-                    round(gemma["cost"], 6),
-                    round(gemma_quality_per_dollar, 2)
+                    round(gemma4["cost"], 6),
+                    round(
+                        quality_per_dollar["Gemma 4"],
+                        2
+                    )
                 ]
             })
 
@@ -753,33 +799,17 @@ if len(st.session_state.evaluation_results) >= 2:
                 hide_index=True
             )
 
-            if qwen_quality_per_dollar > gpt_quality_per_dollar and qwen_quality_per_dollar > gemma_quality_per_dollar:
 
-                st.success(
-                    "🏆 Qwen 2.5 3B currently provides the "
-                    "best quality-to-cost ratio."
-                )
+            # Find best model
+            best_model = max(
+                quality_per_dollar,
+                key=quality_per_dollar.get
+            )
 
-            elif gpt_quality_per_dollar > qwen_quality_per_dollar and gpt_quality_per_dollar > gemma_quality_per_dollar:
-
-                st.success(
-                    "🏆 GPT-OSS-120B currently provides the "
-                    "best quality-to-cost ratio."
-                )
-                
-            elif gemma_quality_per_dollar > gpt_quality_per_dollar and gemma_quality_per_dollar > qwen_quality_per_dollar:
-
-                st.success(
-                    "🏆 Gemma currently provides the "
-                    "best quality-to-cost ratio."
-                )
-
-            else:
-
-                st.info(
-                    "Both models currently have the same "
-                    "quality-to-cost ratio."
-                )
+            st.success(
+                f"🏆 {best_model} currently provides "
+                f"the best quality-to-cost ratio."
+            )
 
         else:
 
@@ -830,6 +860,7 @@ if st.session_state.evaluation_results:
         use_container_width=True,
         hide_index=True
     )
+
 
     # -----------------------------------------------------
     # DOWNLOAD RESULTS
