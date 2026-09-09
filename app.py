@@ -76,7 +76,7 @@ client = Client(
     }
 )
 
-MODEL_NAME = "gemma4"
+MODEL_NAME = "gpt-oss:120b"
 
 
 # ---------------------------------------------------------
