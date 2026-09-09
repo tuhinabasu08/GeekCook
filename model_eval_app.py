@@ -1,5 +1,5 @@
 import streamlit as st
-import ollama
+from ollama import Client
 import time
 import pandas as pd
 from datetime import datetime
@@ -18,6 +18,30 @@ st.title("🤖 GeekCook Model Evaluation")
 st.caption("Compare LLM performance for recipe recommendations")
 
 # =========================================================
+# OLLAMA CLOUD CONFIGURATION
+# =========================================================
+
+try:
+    OLLAMA_API_KEY = st.secrets["OLLAMA_API_KEY"]
+
+except KeyError:
+    st.error(
+        "OLLAMA_API_KEY is not configured.\n\n"
+        "Please add OLLAMA_API_KEY to your Streamlit Secrets."
+    )
+    st.stop()
+
+
+# Create Ollama Cloud client
+client = Client(
+    host="https://ollama.com",
+    headers={
+        "Authorization": f"Bearer {OLLAMA_API_KEY}"
+    }
+)
+
+
+# =========================================================
 # MODEL CONFIGURATION
 # =========================================================
 
@@ -26,20 +50,33 @@ MODELS = {
     "GPT-OSS-120B": "gpt-oss:120b"
 }
 
+
+# =========================================================
+# MODEL COST CONFIGURATION
+# =========================================================
+#
+# Cost should be USD per 1M tokens.
+#
 # IMPORTANT:
-# Replace these with the actual costs you are using.
-# Cost should be expressed as USD per 1M tokens.
+# Replace these values with the actual Ollama Cloud
+# pricing you are using.
+#
+# Keeping them configurable makes it easy to update
+# pricing without changing the evaluation logic.
+# =========================================================
 
 MODEL_COSTS = {
     "Qwen 2.5 3B": {
         "input": 0.00,
         "output": 0.00
     },
+
     "GPT-OSS-120B": {
         "input": 0.00,
         "output": 0.00
     }
 }
+
 
 # =========================================================
 # SESSION STATE
@@ -47,6 +84,7 @@ MODEL_COSTS = {
 
 if "evaluation_results" not in st.session_state:
     st.session_state.evaluation_results = []
+
 
 # =========================================================
 # SIDEBAR
@@ -88,6 +126,7 @@ time_limit = st.sidebar.slider(
     90,
     30
 )
+
 
 # =========================================================
 # PROMPT BUILDER
@@ -136,6 +175,31 @@ Instructions:
 Cooking Time:
 """
 
+
+# =========================================================
+# COST CALCULATION
+# =========================================================
+
+def calculate_cost(
+    model_name,
+    input_tokens,
+    output_tokens
+):
+
+    input_price = MODEL_COSTS[model_name]["input"]
+    output_price = MODEL_COSTS[model_name]["output"]
+
+    input_cost = (
+        input_tokens / 1_000_000
+    ) * input_price
+
+    output_cost = (
+        output_tokens / 1_000_000
+    ) * output_price
+
+    return input_cost + output_cost
+
+
 # =========================================================
 # MODEL CALL
 # =========================================================
@@ -148,7 +212,7 @@ def run_model(model_name, prompt):
 
     try:
 
-        response = ollama.chat(
+        response = client.chat(
             model=model,
             messages=[
                 {
@@ -162,9 +226,16 @@ def run_model(model_name, prompt):
 
         latency = end_time - start_time
 
+        # -------------------------------------------------
+        # RESPONSE
+        # -------------------------------------------------
+
         answer = response["message"]["content"]
 
-        # Ollama generally returns token counts
+        # -------------------------------------------------
+        # TOKEN USAGE
+        # -------------------------------------------------
+
         input_tokens = response.get(
             "prompt_eval_count",
             0
@@ -175,19 +246,29 @@ def run_model(model_name, prompt):
             0
         )
 
+        total_tokens = (
+            input_tokens + output_tokens
+        )
+
         # -------------------------------------------------
-        # COST CALCULATION
+        # TOKENS / SECOND
         # -------------------------------------------------
 
-        input_cost = (
-            input_tokens / 1_000_000
-        ) * MODEL_COSTS[model_name]["input"]
+        tokens_per_second = (
+            output_tokens / latency
+            if latency > 0
+            else 0
+        )
 
-        output_cost = (
-            output_tokens / 1_000_000
-        ) * MODEL_COSTS[model_name]["output"]
+        # -------------------------------------------------
+        # COST
+        # -------------------------------------------------
 
-        total_cost = input_cost + output_cost
+        total_cost = calculate_cost(
+            model_name,
+            input_tokens,
+            output_tokens
+        )
 
         return {
             "model": model_name,
@@ -195,24 +276,26 @@ def run_model(model_name, prompt):
             "latency": latency,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
-            "total_tokens": (
-                input_tokens + output_tokens
-            ),
+            "total_tokens": total_tokens,
+            "tokens_per_second": tokens_per_second,
             "cost": total_cost,
-            "success": True
+            "success": True,
+            "error": None
         }
 
     except Exception as e:
 
         return {
             "model": model_name,
-            "response": f"Error: {str(e)}",
+            "response": "",
             "latency": 0,
             "input_tokens": 0,
             "output_tokens": 0,
             "total_tokens": 0,
+            "tokens_per_second": 0,
             "cost": 0,
-            "success": False
+            "success": False,
+            "error": str(e)
         }
 
 
@@ -232,13 +315,14 @@ st.subheader("📝 Evaluation Prompt")
 with st.expander("View prompt"):
     st.code(prompt)
 
+
 if st.button(
     "🚀 Compare Models",
     type="primary",
     use_container_width=True
 ):
 
-    with st.spinner("Running both models..."):
+    with st.spinner("Running both models on Ollama Cloud..."):
 
         qwen_result = run_model(
             "Qwen 2.5 3B",
@@ -255,31 +339,59 @@ if st.button(
         gpt_result
     ]
 
-    # Store results
+    # Add evaluation metadata
+    for result in results:
+
+        result["timestamp"] = datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+
+        result["ingredients"] = ingredients
+        result["cuisine"] = cuisine
+        result["diet"] = diet
+        result["time_limit"] = time_limit
+
     st.session_state.evaluation_results.extend(
         results
     )
 
     st.success("Model comparison completed!")
 
+
 # =========================================================
 # DISPLAY RESULTS
 # =========================================================
 
-if st.session_state.evaluation_results:
+if len(st.session_state.evaluation_results) >= 2:
 
     latest_results = (
         st.session_state.evaluation_results[-2:]
     )
 
-    if len(latest_results) == 2:
+    qwen = latest_results[0]
+    gpt = latest_results[1]
 
-        qwen = latest_results[0]
-        gpt = latest_results[1]
+    # -----------------------------------------------------
+    # HANDLE MODEL ERRORS
+    # -----------------------------------------------------
 
-        # -------------------------------------------------
-        # SIDE-BY-SIDE RESPONSES
-        # -------------------------------------------------
+    if not qwen["success"]:
+
+        st.error(
+            f"Qwen 2.5 3B failed:\n\n{qwen['error']}"
+        )
+
+    if not gpt["success"]:
+
+        st.error(
+            f"GPT-OSS-120B failed:\n\n{gpt['error']}"
+        )
+
+    # -----------------------------------------------------
+    # SIDE-BY-SIDE RESPONSES
+    # -----------------------------------------------------
+
+    if qwen["success"] and gpt["success"]:
 
         st.divider()
 
@@ -289,9 +401,7 @@ if st.session_state.evaluation_results:
 
         with col1:
 
-            st.markdown(
-                "### Qwen 2.5 3B"
-            )
+            st.markdown("### Qwen 2.5 3B")
 
             st.markdown(
                 qwen["response"]
@@ -299,9 +409,7 @@ if st.session_state.evaluation_results:
 
         with col2:
 
-            st.markdown(
-                "### GPT-OSS-120B"
-            )
+            st.markdown("### GPT-OSS-120B")
 
             st.markdown(
                 gpt["response"]
@@ -322,6 +430,7 @@ if st.session_state.evaluation_results:
                 "Input Tokens",
                 "Output Tokens",
                 "Total Tokens",
+                "Tokens / Second",
                 "Estimated Cost ($)"
             ],
 
@@ -330,6 +439,7 @@ if st.session_state.evaluation_results:
                 qwen["input_tokens"],
                 qwen["output_tokens"],
                 qwen["total_tokens"],
+                round(qwen["tokens_per_second"], 2),
                 round(qwen["cost"], 6)
             ],
 
@@ -338,6 +448,7 @@ if st.session_state.evaluation_results:
                 gpt["input_tokens"],
                 gpt["output_tokens"],
                 gpt["total_tokens"],
+                round(gpt["tokens_per_second"], 2),
                 round(gpt["cost"], 6)
             ]
         })
@@ -417,19 +528,31 @@ if st.session_state.evaluation_results:
         # -------------------------------------------------
         # OVERALL SCORE
         # -------------------------------------------------
-
-        # Cost is intentionally weighted heavily because
-        # cost is the primary decision criterion.
+        #
+        # Cost is the primary model-selection criterion.
+        #
+        # Quality score itself is normalized to a 1-5 scale.
+        #
+        # 60% Recipe Quality
+        # 40% Constraint Following
+        #
+        # Cost is evaluated separately below because it is
+        # the primary business decision criterion.
+        # -------------------------------------------------
 
         qwen_score = (
-            qwen_quality * 0.30
-            + qwen_constraints * 0.20
+            qwen_quality * 0.60
+            + qwen_constraints * 0.40
         )
 
         gpt_score = (
-            gpt_quality * 0.30
-            + gpt_constraints * 0.20
+            gpt_quality * 0.60
+            + gpt_constraints * 0.40
         )
+
+        # -------------------------------------------------
+        # SCORE COMPARISON
+        # -------------------------------------------------
 
         st.divider()
 
@@ -466,52 +589,109 @@ if st.session_state.evaluation_results:
         )
 
         # -------------------------------------------------
-        # QUALITY PER DOLLAR
+        # COST COMPARISON
         # -------------------------------------------------
 
-        st.subheader("💰 Quality per Dollar")
+        st.subheader("💰 Cost Comparison")
 
-        if qwen["cost"] > 0:
+        cost_col1, cost_col2 = st.columns(2)
 
-            qwen_qpd = (
-                qwen_score / qwen["cost"]
-            )
-
-        else:
-            qwen_qpd = float("inf")
-
-        if gpt["cost"] > 0:
-
-            gpt_qpd = (
-                gpt_score / gpt["cost"]
-            )
-
-        else:
-            gpt_qpd = float("inf")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
+        with cost_col1:
 
             st.metric(
                 "Qwen 2.5 3B",
-                (
-                    "∞"
-                    if qwen_qpd == float("inf")
-                    else f"{qwen_qpd:.2f}"
-                )
+                f"${qwen['cost']:.6f}"
             )
 
-        with col2:
+        with cost_col2:
 
             st.metric(
                 "GPT-OSS-120B",
-                (
-                    "∞"
-                    if gpt_qpd == float("inf")
-                    else f"{gpt_qpd:.2f}"
-                )
+                f"${gpt['cost']:.6f}"
             )
+
+        if qwen["cost"] == 0 and gpt["cost"] == 0:
+
+            st.info(
+                "Model pricing is currently set to $0.00. "
+                "Update MODEL_COSTS with the actual Ollama "
+                "Cloud input/output pricing to enable cost "
+                "comparison."
+            )
+
+        # -------------------------------------------------
+        # MODEL RECOMMENDATION
+        # -------------------------------------------------
+
+        st.divider()
+
+        st.subheader("🎯 GeekCook Decision")
+
+        if qwen["cost"] > 0 and gpt["cost"] > 0:
+
+            qwen_quality_per_dollar = (
+                qwen_score / qwen["cost"]
+            )
+
+            gpt_quality_per_dollar = (
+                gpt_score / gpt["cost"]
+            )
+
+            qpd_df = pd.DataFrame({
+
+                "Metric": [
+                    "Quality Score",
+                    "Cost ($)",
+                    "Quality / Dollar"
+                ],
+
+                "Qwen 2.5 3B": [
+                    round(qwen_score, 2),
+                    round(qwen["cost"], 6),
+                    round(qwen_quality_per_dollar, 2)
+                ],
+
+                "GPT-OSS-120B": [
+                    round(gpt_score, 2),
+                    round(gpt["cost"], 6),
+                    round(gpt_quality_per_dollar, 2)
+                ]
+            })
+
+            st.dataframe(
+                qpd_df,
+                use_container_width=True,
+                hide_index=True
+            )
+
+            if qwen_quality_per_dollar > gpt_quality_per_dollar:
+
+                st.success(
+                    "🏆 Qwen 2.5 3B currently provides the "
+                    "better quality-to-cost ratio."
+                )
+
+            elif gpt_quality_per_dollar > qwen_quality_per_dollar:
+
+                st.success(
+                    "🏆 GPT-OSS-120B currently provides the "
+                    "better quality-to-cost ratio."
+                )
+
+            else:
+
+                st.info(
+                    "Both models currently have the same "
+                    "quality-to-cost ratio."
+                )
+
+        else:
+
+            st.warning(
+                "Add actual model pricing to calculate "
+                "quality-to-dollar efficiency."
+            )
+
 
 # =========================================================
 # EVALUATION HISTORY
@@ -527,13 +707,25 @@ if st.session_state.evaluation_results:
         st.session_state.evaluation_results
     )
 
+    history_columns = [
+        "timestamp",
+        "model",
+        "cuisine",
+        "diet",
+        "time_limit",
+        "latency",
+        "input_tokens",
+        "output_tokens",
+        "total_tokens",
+        "tokens_per_second",
+        "cost"
+    ]
+
     history_df = history_df[
         [
-            "model",
-            "latency",
-            "input_tokens",
-            "output_tokens",
-            "cost"
+            col
+            for col in history_columns
+            if col in history_df.columns
         ]
     ]
 
@@ -542,6 +734,10 @@ if st.session_state.evaluation_results:
         use_container_width=True,
         hide_index=True
     )
+
+    # -----------------------------------------------------
+    # DOWNLOAD RESULTS
+    # -----------------------------------------------------
 
     csv = history_df.to_csv(
         index=False
@@ -557,5 +753,7 @@ if st.session_state.evaluation_results:
 else:
 
     st.info(
-        "Run a model comparison to start collecting evaluation results."
+        "Run a model comparison to start collecting "
+        "evaluation results."
     )
+
