@@ -76,7 +76,7 @@ client = Client(
     }
 )
 
-MODEL_NAME = "gpt-oss:120b"
+MODEL_NAME = "qwen2.5:3b"
 
 
 # ---------------------------------------------------------
