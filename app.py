@@ -76,7 +76,7 @@ client = Client(
     }
 )
 
-MODEL_NAME = "qwen2.5:3b"
+MODEL_NAME = "gemma4"
 
 
 # ---------------------------------------------------------
