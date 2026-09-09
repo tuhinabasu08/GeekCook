@@ -48,8 +48,8 @@ client = Client(
 # =========================================================
 
 MODELS = {
-    "Qwen 2.5 3B": "qwen2.5:3b",
     "GPT-OSS-120B": "gpt-oss:120b",
+    "GPT-OSS-20B": "gpt-oss:20b",
     "Gemma 4": "gemma4"
 }
 
@@ -65,12 +65,12 @@ MODELS = {
 # =========================================================
 
 MODEL_COSTS = {
-    "Qwen 2.5 3B": {
+    "GPT-OSS-120B": {
         "input": 0.00,
         "output": 0.00
     },
 
-    "GPT-OSS-120B": {
+    "GPT-OSS-20B": {
         "input": 0.00,
         "output": 0.00
     },
@@ -329,7 +329,7 @@ if st.button(
     results = []
 
     with st.spinner(
-        "Running Qwen 2.5 3B, GPT-OSS-120B and Gemma 4 on Ollama Cloud..."
+        "Running GPT-OSS-120B, GPT-OSS-20B and Gemma 4 on Ollama Cloud..."
     ):
 
         for model_name in MODELS:
@@ -386,8 +386,8 @@ if len(st.session_state.evaluation_results) >= 3:
             break
 
 
-    qwen = latest_results["Qwen 2.5 3B"]
-    gpt = latest_results["GPT-OSS-120B"]
+    qwen = latest_results["GPT-OSS-120B"]
+    gpt = latest_results["GPT-OSS-20B"]
     gemma4 = latest_results["Gemma 4"]
 
 
@@ -427,7 +427,7 @@ if len(st.session_state.evaluation_results) >= 3:
 
         with col1:
 
-            st.markdown("### Qwen 2.5 3B")
+            st.markdown("### GPT-OSS-120B")
 
             st.markdown(
                 qwen["response"]
@@ -435,7 +435,7 @@ if len(st.session_state.evaluation_results) >= 3:
 
         with col2:
 
-            st.markdown("### GPT-OSS-120B")
+            st.markdown("### GPT-OSS-20B")
 
             st.markdown(
                 gpt["response"]
@@ -469,7 +469,7 @@ if len(st.session_state.evaluation_results) >= 3:
                 "Estimated Cost ($)"
             ],
 
-            "Qwen 2.5 3B": [
+            "GPT-OSS-120B": [
                 round(qwen["latency"], 2),
                 qwen["input_tokens"],
                 qwen["output_tokens"],
@@ -478,7 +478,7 @@ if len(st.session_state.evaluation_results) >= 3:
                 round(qwen["cost"], 6)
             ],
 
-            "GPT-OSS-120B": [
+            "GPT-OSS-20B": [
                 round(gpt["latency"], 2),
                 gpt["input_tokens"],
                 gpt["output_tokens"],
@@ -525,7 +525,7 @@ if len(st.session_state.evaluation_results) >= 3:
 
         with col1:
 
-            st.markdown("### Qwen 2.5 3B")
+            st.markdown("### GPT-OSS-120B")
 
             qwen_quality = st.slider(
                 "Recipe quality",
@@ -556,7 +556,7 @@ if len(st.session_state.evaluation_results) >= 3:
 
         with col2:
 
-            st.markdown("### GPT-OSS-120B")
+            st.markdown("### GPT-OSS-20B")
 
             gpt_quality = st.slider(
                 "Recipe quality",
@@ -657,14 +657,14 @@ if len(st.session_state.evaluation_results) >= 3:
                 "Overall Quality Score"
             ],
 
-            "Qwen 2.5 3B": [
+            "GPT-OSS-120B": [
                 qwen_quality,
                 qwen_constraints,
                 1 if qwen_cook == "Yes" else 0,
                 round(qwen_score, 2)
             ],
 
-            "GPT-OSS-120B": [
+            "GPT-OSS-20B": [
                 gpt_quality,
                 gpt_constraints,
                 1 if gpt_cook == "Yes" else 0,
@@ -697,14 +697,14 @@ if len(st.session_state.evaluation_results) >= 3:
         with cost_col1:
 
             st.metric(
-                "Qwen 2.5 3B",
+                "GPT-OSS-120B",
                 f"${qwen['cost']:.6f}"
             )
 
         with cost_col2:
 
             st.metric(
-                "GPT-OSS-120B",
+                "GPT-OSS-20B",
                 f"${gpt['cost']:.6f}"
             )
 
@@ -746,10 +746,10 @@ if len(st.session_state.evaluation_results) >= 3:
 
             quality_per_dollar = {
 
-                "Qwen 2.5 3B":
+                "GPT-OSS-120B":
                     qwen_score / qwen["cost"],
 
-                "GPT-OSS-120B":
+                "GPT-OSS-20B":
                     gpt_score / gpt["cost"],
 
                 "Gemma 4":
@@ -765,20 +765,20 @@ if len(st.session_state.evaluation_results) >= 3:
                     "Quality / Dollar"
                 ],
 
-                "Qwen 2.5 3B": [
+                "GPT-OSS-120B": [
                     round(qwen_score, 2),
                     round(qwen["cost"], 6),
                     round(
-                        quality_per_dollar["Qwen 2.5 3B"],
+                        quality_per_dollar["GPT-OSS-120B"],
                         2
                     )
                 ],
 
-                "GPT-OSS-120B": [
+                "GPT-OSS-20B": [
                     round(gpt_score, 2),
                     round(gpt["cost"], 6),
                     round(
-                        quality_per_dollar["GPT-OSS-120B"],
+                        quality_per_dollar["GPT-OSS-20B"],
                         2
                     )
                 ],
